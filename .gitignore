@@ -13,3 +13,4 @@ __pycache__./
 *.bak
 dataframe.pkl
 dataframe*.pkl
+Miniconda*.sh

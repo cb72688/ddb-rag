@@ -12,6 +12,12 @@ torch>=2.0.0
 transformers>=4.30.0
 einops>=0.6.0
 
+# Authentication and security
+huggingface_hub>=0.19.0
+keyring>=24.0.0
+cryptography>=41.0.0
+python-dotenv>=1.0.0
+
 # Optional but recommended
 tqdm>=4.65.0
 numpy>=1.24.0
@@ -19,4 +25,4 @@ scipy>=1.10.0
 
 # For GPU support (optional)
 # Uncomment if you have CUDA installed:
-# torch-cuda>=2.0.0
+torch>=2.0.0

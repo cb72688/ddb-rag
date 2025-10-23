@@ -13,6 +13,11 @@ from sentence_transformers import SentenceTransformer
 
 # Import the model configurator
 from ddb_sp_mdl_sel import ModelConfigurator, Colors
+try:
+    from hf_auth import hfAuth
+    AUTH_AVAILABLE = True
+except ImportError:
+    AUTH_AVAILABLE = False
 
 class DuckDBRAG:
     """Main RAG system class"""
@@ -21,6 +26,12 @@ class DuckDBRAG:
         self.model = None
         self.model_config = None
         self.dataframe = None
+
+        # Initialize authentication
+        if AUTH_AVAILABLE:
+            self.auth = hfAuth()
+        else:
+            self.auth = None
         
     def print_header(self, text: str):
         """Print formatted header"""
@@ -86,11 +97,37 @@ class DuckDBRAG:
         
         print(f"\nLoading {model_name}...")
         
+        # Get token if available
+        token = None
+        if self.auth:
+            token = self.auth.get_token()
+            if token:
+                os.environ['HF_TOKEN'] = token
+
         try:
             model = SentenceTransformer(model_name, device='cuda:0')
             self.print_success(f"Model loaded: {model_name}")
             return model
         except Exception as e:
+            error_msg = str(e)
+
+            # Check for authentication error
+            if any(keyword in error_msg.lower() for keyword in ['401', '403', 'gated', 'authentication']):
+                self.print_error("This model requires authentication")
+
+                if self.auth and self.auth.ensure_authenticated():
+                    self.print_success("Authentication successful, retrying...")
+                    try:
+                        token = self.auth.get_token()
+                        os.environ['HF_TOKEN'] = token
+                        model = SentenceTransformer(model_name, device='cuda:0', token=token)
+                        self.print_success("Model loaded: {model_name}")
+                        return model
+                    except Exception as retry_error:
+                        self.print_error(f"Failed: {retry_error}")
+                else:
+                    self.print_error("Authentication failed or not available")
+
             self.print_error(f"Failed to load model: {str(e)}")
             try:
                 print("Trying CPU...")
@@ -294,7 +331,6 @@ class DuckDBRAG:
             self.print_error(f"Unexpected error: {str(e)}")
             import traceback
             traceback.print_exc()
-
 
 def main():
     """Entry point"""

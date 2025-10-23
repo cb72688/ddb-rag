@@ -15,12 +15,21 @@ from typing import Dict, List, Optional, Tuple, Any
 import requests
 from sentence_transformers import SentenceTransformer
 
+# Import authentication module
+try:
+    from hf_auth import hfAuth
+    AUTH_AVAILABLE = True
+except ImportError:
+    AUTH_AVAILABLE = False
+    print("WARNING: hf_auth module not found.  Gated models may not be accessible")
+
 # Configuration paths
 USER_HOME = os.path.expanduser("~")
 CONFIG_BASE = os.path.join(USER_HOME, ".config", "ddbrag")
 CONFIG_DIR = os.path.join(CONFIG_BASE, "configs")
 MODEL_DIR = os.path.join(CONFIG_BASE, "models")
-
+LOG_DIR = "./logs/"
+folders = [CONFIG_DIR, MODEL_DIR, LOG_DIR]
 
 class Colors:
     """ANSI color codes for terminal output"""
@@ -34,7 +43,6 @@ class Colors:
     BOLD = '\033[1m'
     UNDERLINE = '\033[4m'
 
-
 class ModelConfigurator:
     """Main class for model selection and configuration"""
     
@@ -43,11 +51,17 @@ class ModelConfigurator:
         self.model_config = {}
         self.config_file_path = None
         self.ensure_directories()
-        
+
+        # Initialize authentication
+        if AUTH_AVAILABLE:
+            self.auth = hfAuth()
+        else:
+            self.auth = None
+
     def ensure_directories(self):
         """Create necessary directories if they don't exist"""
-        os.makedirs(CONFIG_DIR, exist_ok=True)
-        os.makedirs(MODEL_DIR, exist_ok=True)
+        for folder in folders:
+            os.makedirs(folder, exist_ok=True)
         
     def print_header(self, text: str):
         """Print formatted header"""
@@ -187,13 +201,13 @@ class ModelConfigurator:
                 "options": ["cuda:0", "cpu", "mps"]
             },
             "max_seq_length": {
-                "value": 512,
+                "value": 8192,
                 "description": "Maximum sequence length for tokenization",
                 "type": "int",
                 "range": [64, 8192]
             },
             "batch_size": {
-                "value": 32,
+                "value": 64,
                 "description": "Batch size for encoding",
                 "type": "int",
                 "range": [1, 256]
@@ -204,7 +218,7 @@ class ModelConfigurator:
                 "type": "bool"
             },
             "trust_remote_code": {
-                "value": False,
+                "value": True,
                 "description": "Trust and execute remote code from model repository",
                 "type": "bool"
             },
@@ -465,17 +479,31 @@ class ModelConfigurator:
         
         # Extract parameter values
         param_values = {k: v['value'] for k, v in params.items()}
-        
+
+        # Ensure authentication if auth module is available
+        if self.auth and not self.auth.is_authenticated():
+            print(f"\n{Colors.WARNING}Note: You may need authentication to access gated models{Colors.ENDC}")
+            print(f"{Colors.OKCYAN}If the model is gated, authentication will be prompted automatically{Colors.ENDC}")
+
         try:
             print(f"\n  Downloading and initializing model...")
             print(f"  Device: {param_values.get('device', 'cpu')}")
             print(f"  Cache: {param_values.get('cache_folder', MODEL_DIR)}")
-            
+
+            # Get token if available
+            token = None
+            if self.auth:
+                token = self.auth.get_token()
+                if token:
+                    # Set token in environment for sentence_transformers usage
+                    os.environ['HF_TOKEN'] = token
+
             model = SentenceTransformer(
                 model_name,
                 device=param_values.get('device', 'cpu'),
                 cache_folder=param_values.get('cache_folder', MODEL_DIR),
-                trust_remote_code=param_values.get('trust_remote_code', False)
+                trust_remote_code=param_values.get('trust_remote_code', True),
+                token=token # Pass token to SentenceTransformers
             )
             
             # Set additional parameters
@@ -490,8 +518,55 @@ class ModelConfigurator:
             return model
             
         except Exception as e:
-            self.print_error(f"Failed to load model: {str(e)}")
-            return None
+            error_msg = str(e)
+
+            # Check if it's an authentication error
+            if any(keyword in error_msg.lower() for keyword in ['401', '403', 'gated', 'authentication', 'unauthorized']):
+                self.print_error("This model requires authentication on huggingface")
+
+                if self.auth:
+                    print(f"\n{Colors.OKCYAN}Attempting to authenticate...{Colors.ENDC}")
+                    if self.auth.ensure_authenticated():
+                        self.print_success("Authentication successful!")
+                        print(f"\n{Colors.BOLD}Please try loading the model again.{Colors.ENDC}")
+
+                        # Retry once after authentication
+                        try:
+                            token = self.auth.get_token()
+                            os.environ['HF_TOKEN'] = token
+
+                            model = SentenceTransformer(
+                                model_name,
+                                device=param_values.get('device', 'cpu'),
+                                cache_folder=param_values.get('cache_folder', MODEL_DIR),
+                                trust_remote_code=param_values.get('trust_remote_code', True),
+                                token=token
+                            )
+
+                            if 'max_seq_length' in param_values:
+                                model.max_seq_length = param_values['max_seq_length']
+
+                            self.print_success(f"Model loaded successfully after authentication!")
+                            return model
+
+                        except Exception as retry_error:
+                            self.print_error(f"Failed again: {retry_error}")
+                            return None
+                    else:
+                        self.print_error("Authentication failed")
+                        print(f"\n{Colors.WARNING}For gated models, you may need to:{Colors.ENDC}\n")
+                        print("1. Visit the model page on huggingface.co")
+                        print("2. Accept the model's terms of use")
+                        print("3. Wait for access approvial (if required)")
+                        return None
+                else:
+                    self.print_error("Authentication module not available")
+                    print(f"\n{Colors.WARNING}Install required packages:{Colors.ENDC}")
+                    print("    pip install huggingface_hub keyring cryptography python-dotenv")
+                    return None
+            else:
+                self.print_error(f"Failed to load model: {error_msg}")
+                return None
     
     def run(self) -> Tuple[Optional[SentenceTransformer], Optional[Dict[str, Any]]]:
         """Main workflow"""
@@ -501,6 +576,20 @@ class ModelConfigurator:
             # Show existing configs
             self.list_existing_configs()
             
+            # Authentication check
+            if self.auth:
+                print(f"\n{Colors.OKCYAN}Authentication status:{Colors.ENDC}")
+                if self.auth.is_authenticated():
+                    print(f"    {Colors.OKGREEN}✓ Authenticated as {self.auth.user_info.get('name', 'Unknown')}{Colors.ENDC}")
+                else:
+                    print(f"    {Colors.WARNING}⚠ Not authenticated (required for gated models){Colors.ENDC}")
+
+                # Offer to login now
+                login_choice = input(f"\n{Colors.BOLD}Login to huggingface.co now? (y/n, default=n): {Colors.ENDC}").strip().lower()
+                if login_choice == 'y':
+                    if not self.auth.interactive_login():
+                        print(f"{Colors.WARNING}Continuing without authentication{Colors.ENDC}")
+
             # Step 1: Search for model
             while True:
                 self.print_section("Model Search")
@@ -558,7 +647,6 @@ class ModelConfigurator:
             traceback.print_exc()
             return None, None
 
-
 def main():
     """Standalone execution"""
     configurator = ModelConfigurator()
@@ -572,7 +660,6 @@ def main():
     else:
         print(f"\n{Colors.WARNING}No model configured.{Colors.ENDC}")
         return None, None
-
 
 if __name__ == "__main__":
     main()

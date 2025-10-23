@@ -13,12 +13,16 @@ class DDBRagModel:
         if cls._instance is None:
             cls._instance = super(DDBRagModel, cls).__new__(cls)
             # Add other hyperparameters and settings here
-            cls._instance.config = ("model_name": "jinaai/jina-embeddings-v3", "device": detect_proc(), "normalize_embeddings": True)
+            cls._instance.config = {
+                "model_name": "jinaai/jina-embeddings-v3",
+                "device": detect_proc(),
+                "normalize_embeddings": True
+            }
         return cls._instance
 
     def __init__(self, config_file=None):
         if config_file:
-            self.load_cionfig(config_file)
+            self.load_config(config_file)
         self._load_model()
 
     def _load_model(self):
@@ -28,10 +32,12 @@ class DDBRagModel:
         normalize = self.config.get("normalize_embeddings")
 
         # Instantiate the model with current settings
-        self._model = SentenceTransformers(
-            model_name=model_name, device=device, normalize_embeddings=normalize)
-        print(f"Model '{model_name}' loaded successfully on device '{
-              device}' with embedding normalization set to '{normalize}'")
+        self._model = SentenceTransformer(
+            model_name=model_name,
+            device=device,
+            normalize_embeddings=normalize
+        )
+        print(f"Model '{model_name}' loaded successfully on device '{device}' with embedding normalization set to '{normalize}'")
 
     @property
     def model(self):
@@ -39,7 +45,7 @@ class DDBRagModel:
         return self._model
 
     def update_settings(self, new_settings: dict):
-        # Updates model settings and reloads the moddel to apply them
+        # Updates model settings and reloads the model to apply them
         self.config.update(new_settings)
         self._load_model()
 
@@ -60,4 +66,4 @@ class DDBRagModel:
             print(f"Configuration loaded from {config_path}")
             self._load_model()
         else:
-    print(f"Warning: Configuration file '{filename}' not found")
+            print(f"Warning: Configuration file '{filename}' not found")

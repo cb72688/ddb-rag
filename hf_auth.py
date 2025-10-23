@@ -44,7 +44,7 @@ try:
     from cryptography.fernet import Fernet
     CRYPTO_AVAILABLE = True
 except ImportError:
-    CRYPTO_AVAILBLE = False
+    CRYPTO_AVAILABLE = False
     logger.warning("cryptography not installed.  Run: pip install cryptography")
 
 try:
@@ -95,15 +95,15 @@ class hfAuth:
 
     def print_success(self, text: str):
         # Print success message
-        logger.info(f"{Colors.OKGREEN}✓ {text}{Colors.ENDC}")
+        print(f"{Colors.OKGREEN}✓ {text}{Colors.ENDC}")
 
     def print_warning(self, text: str):
         # Print warning message
-        logger.warning(f"{Colors.WARNING}⚠ {text}{Colors.ENDC}")
+        print(f"{Colors.WARNING}⚠ {text}{Colors.ENDC}")
 
     def print_error(self, text: str):
-        # Print section header
-        logger.info(f"\n{Colors.OKBLUE}{Colors.BOLD}>>> {text}{Colors.ENDC}")
+        # Print error message
+        print(f"{Colors.FAIL}✗ {text}{Colors.ENDC}")
 
     def print_section(self, text: str):
         """Print formatted section header"""
@@ -122,7 +122,7 @@ class hfAuth:
             key = Fernet.generate_key()
             # Save with restricted permissions
             self.key_file.write_bytes(key)
-            self.key_file.chmod(0x600) # Read/Write for owner only
+            self.key_file.chmod(0o600) # Read/Write for owner only
             return key
 
     def _encrypt_token(self, token: str) -> str:
@@ -158,7 +158,7 @@ class hfAuth:
         for var in self.ENV_VARS:
             token = os.environ.get(var)
             if token:
-                self.print_success(f"Found token in environemnt variable: {var}")
+                self.print_success(f"Found token in environment variable: {var}")
                 return token
         return None
 
@@ -223,7 +223,7 @@ class hfAuth:
             os.environ["HF_TOKEN"] = token
             user_info = whoami(token=token)
             self.user_info = user_info
-            self.print_success("Authenticated as: {user_info.get('name', 'Unknown')}")
+            self.print_success(f"Authenticated as: {user_info.get('name', 'Unknown')}")
             return True
         except HfHubHTTPError as e:
             if e.response.status_code == 401:
@@ -237,18 +237,18 @@ class hfAuth:
 
     def prompt_for_token(self) -> Optional[str]:
         # Prompt user to enter token manually
-        self.print_section("Enter huggingface token:")
+        self.print_section("Enter huggingface token")
 
-        logger.info(f"\n{Colors.OKCYAN}You need a huggingface access token to access gated models.{Colors.ENDC}")
-        logger.info(f"\n{Colors.BOLD}To get your token:{Colors.ENDC}")
-        logger.info("1. Go to https://huggingface.co/settings/tokens")
-        logger.info("2. Create a new token (read access is sufficient)")
-        logger.info("3. Copy the token and paste it below\n")
-        logger.info(f"\n{Colors.WARNING}Note: Token input will be hidden for security reasons{Colors.ENDC}\n")
-        logger.info(f"\n{Colors.OKCYAN}Press Ctrl+C to cancel{Colors.ENDC}\n")
+        print(f"\n{Colors.OKCYAN}You need a huggingface access token to access gated models.{Colors.ENDC}")
+        print(f"\n{Colors.BOLD}To get your token:{Colors.ENDC}")
+        print("1. Go to https://huggingface.co/settings/tokens")
+        print("2. Create a new token (read access is sufficient)")
+        print("3. Copy the token and paste it below\n")
+        print(f"{Colors.WARNING}Note: Token input will be hidden for security reasons{Colors.ENDC}\n")
+        print(f"{Colors.OKCYAN}Press Ctrl+C to cancel{Colors.ENDC}\n")
 
         try:
-            token = getpass.getpass(f"{Colors.BOLD}Enter token: {Colors.ENDC}\n")
+            token = getpass.getpass(f"{Colors.BOLD}Enter token: {Colors.ENDC}")
             return token.strip() if token else None
         except KeyboardInterrupt:
             print("\n")
@@ -293,7 +293,7 @@ class hfAuth:
                 except Exception:
                     pass
 
-            # Clear enviornment variable
+            # Clear environment variable
             if "HF_TOKEN" in os.environ:
                 del os.environ["HF_TOKEN"]
 
@@ -327,7 +327,7 @@ class hfAuth:
 
         return False
 
-    def ensure_authentication(self) -> bool:
+    def ensure_authenticated(self) -> bool:
         # Ensure user is authenticated; trigger prompt if needed
         if self.is_authenticated():
             return True
@@ -348,17 +348,17 @@ class hfAuth:
 
         # Check if already authenticated
         if self.is_authenticated():
-            logger.info(f"{Colors.OKGREEN}Already authenticated as: {self.user_info.get('name', 'Unknown')}{Colors.ENDC}")
+            print(f"{Colors.OKGREEN}Already authenticated as: {self.user_info.get('name', 'Unknown')}{Colors.ENDC}")
             choice = input(f"\n{Colors.BOLD}Re-authenticate? (y/n): {Colors.ENDC}").strip().lower()
             if choice != 'y':
                 return True
 
-        logger.info(f"\n{Colors.OKCYAN}Authentication Options:{Colors.ENDC}")
-        logger.info("1. Enter token manually")
-        logger.info("2. Use environemnt variable")
-        logger.info("3. Cancel")
+        print(f"\n{Colors.OKCYAN}Authentication Options:{Colors.ENDC}")
+        print("1. Enter token manually")
+        print("2. Use environment variable")
+        print("3. Cancel")
 
-        choice = input(f"\n{Colors.BOLD}Choice (1-3): {Colors.ENDC}").strip().lower()
+        choice = input(f"\n{Colors.BOLD}Choice (1-3): {Colors.ENDC}").strip()
         
         if choice == '1':
             token = self.prompt_for_token()
@@ -371,9 +371,9 @@ class hfAuth:
                 return self.login_huggingface(token, save=True)
             else:
                 self.print_error("No token found in environment variables")
-                logger.info(f"\n{Colors.OKCYAN}Set one of these environment variables:{Colors.ENDC}")
+                print(f"\n{Colors.OKCYAN}Set one of these environment variables:{Colors.ENDC}")
                 for var in self.ENV_VARS:
-                    logger.info(f"   export {var}=your_token_here")
+                    print(f"   export {var}=your_token_here")
                 return False
         else:
             return False
@@ -381,7 +381,7 @@ class hfAuth:
     def get_token(self) -> Optional[str]:
         # Get the current authentication token
         if not self.token:
-            self.ensure_authentication()
+            self.ensure_authenticated()
         return self.token
 
     def handle_auth_error(self, error: Exception) -> bool:
@@ -389,10 +389,10 @@ class hfAuth:
         self.print_error("Authentication error detected")
 
         # Check if it's a 401/403 error (unauthorized)
-        if isinstance(error, HfHubHTTPError):
+        if isinstance(error, HfHubHTTPError) and HF_HUB_AVAILABLE:
             if error.response.status_code in [401, 403]:
-                logger.info(f"\n{Colors.WARNING}This model requires authentication or you don't have access{Colors.ENDC}")
-                logger.info(f"\n{Colors.OKCYAN}Attempting to authenticate...{Colors.ENDC}")
+                print(f"\n{Colors.WARNING}This model requires authentication or you don't have access{Colors.ENDC}")
+                print(f"\n{Colors.OKCYAN}Attempting to authenticate...{Colors.ENDC}")
 
                 # Try to authenticate
                 if self.ensure_authenticated():
@@ -400,39 +400,41 @@ class hfAuth:
                     return True
                 else:
                     self.print_error("Authentication failed")
-                    logger.info(f"\n{Colors.WARNING}If this is a gated model, you may need to: {Colors.ENDC}\n")
-                    logger.info("1. Go to the model page on huggingface.co")
-                    logger.info("2. Accept the model's terms of use")
-                    logger.info("3. Wait for access approval (if required)")
+                    print(f"\n{Colors.WARNING}If this is a gated model, you may need to:{Colors.ENDC}\n")
+                    print("1. Go to the model page on huggingface.co")
+                    print("2. Accept the model's terms of use")
+                    print("3. Wait for access approval (if required)")
                     return False
         # Unknown error
         self.print_error(f"Error: {error}")
         return False
 
-    def test_authentication():
-        # Test authentication functionality
-        auth = HuggingFaceAuth()
 
-        logger.info(f"\n{Colors.HEADER}{'='*80}{Colors.ENDC}")
-        logger.info(f"{Colors.HEADER}{Colors.BOLD}{'Hugging Face Authentication Test'.center(80)}{Colors.ENDC}\n")
-        logger.info(f"\n{Colors.HEADER}{'='*80}{Colors.ENDC}")
+def test_authentication():
+    # Test authentication functionality
+    auth = hfAuth()
 
-        # Check authentication status
-        if auth.is_authenticated():
-            logger.info(f"\n{Colors.OKGREEN}✓ Already authenticated!{Colors.ENDC}")
-            logger.info(f"  User: {auth.user_info.get('name', 'Unkown')}")
-            logger.info(f"  E-Mail: {auth.user_info.get('email', 'Unknown')}")
+    print(f"\n{Colors.HEADER}{'='*80}{Colors.ENDC}")
+    print(f"{Colors.HEADER}{Colors.BOLD}{'Hugging Face Authentication Test'.center(80)}{Colors.ENDC}")
+    print(f"{Colors.HEADER}{'='*80}{Colors.ENDC}\n")
+
+    # Check authentication status
+    if auth.is_authenticated():
+        print(f"\n{Colors.OKGREEN}✓ Already authenticated!{Colors.ENDC}")
+        print(f"  User: {auth.user_info.get('name', 'Unknown')}")
+        print(f"  E-Mail: {auth.user_info.get('email', 'Unknown')}")
+        return True
+    else:
+        print(f"\n{Colors.WARNING}Not currently authenticated{Colors.ENDC}")
+
+        # Try interactive login
+        if auth.interactive_login():
+            print(f"\n{Colors.OKGREEN}✓ Authentication successful!{Colors.ENDC}")
             return True
         else:
-            logger.info(f"\n{Colors.WARNING}Not currently authenticated{Colors.ENDC}")
+            print(f"\n{Colors.FAIL}✗ Authentication failed{Colors.ENDC}")
+            return False
 
-            # Try interactive login
-            if auth.interactive_login():
-                logger.info(f"\n{Colors.OKGREEN}✓ Authentication successful!{Colors.ENDC}")
-                return True
-            else:
-                logger.info(f"\n{Colors.FAIL}✗ Authentication failed{Colors.ENDC}")
-                return False
 
 def main():
     # Main entrypoint for standalone usage
@@ -444,3 +446,25 @@ def main():
     parser.add_argument('--test', action='store_true', help='Test authentication')
 
     args = parser.parse_args()
+
+    auth = hfAuth()
+
+    if args.login:
+        auth.interactive_login()
+    elif args.logout:
+        auth.logout_huggingface()
+    elif args.status:
+        if auth.is_authenticated():
+            print(f"{Colors.OKGREEN}✓ Authenticated{Colors.ENDC}")
+            print(f"User: {auth.user_info.get('name', 'Unknown')}")
+            print(f"Email: {auth.user_info.get('email', 'Unknown')}")
+        else:
+            print(f"{Colors.WARNING}Not authenticated{Colors.ENDC}")
+    elif args.test:
+        test_authentication()
+    else:
+        parser.print_help()
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,15 @@
+**/__pycache__/
+__pycache__./
+**/*.pyc
+*.pyc
+**/*.log
+*.log
+.env
+**/*.sql
+*.sql
+**/*.db
+*.db
+**/*.bak
+*.bak
+dataframe.pkl
+dataframe*.pkl
